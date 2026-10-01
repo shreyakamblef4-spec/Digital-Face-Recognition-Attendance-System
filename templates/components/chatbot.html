@@ -1,0 +1,109 @@
+<!-- AttendAI Centralized AI Chatbot Component -->
+<div id="attendai-chatbot-root" class="attendai-chatbot-container">
+    <!-- Floating Launcher Trigger Button -->
+    <button id="chatbot-launcher-btn" class="chatbot-launcher" aria-label="Open AttendAI Assistant" title="AttendAI Assistant">
+        <div class="launcher-glow"></div>
+        <div class="launcher-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                <circle cx="9" cy="10" r="1" fill="currentColor"></circle>
+                <circle cx="15" cy="10" r="1" fill="currentColor"></circle>
+            </svg>
+        </div>
+        <span class="launcher-badge-dot"></span>
+    </button>
+
+    <!-- Floating Chat Window Modal -->
+    <div id="chatbot-window" class="chatbot-window hidden" role="dialog" aria-labelledby="chatbot-title" aria-modal="false">
+        <!-- Header -->
+        <div class="chatbot-header">
+            <div class="chatbot-header-info">
+                <div class="chatbot-avatar">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2 2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"></path>
+                        <rect x="4" y="8" width="16" height="12" rx="2"></rect>
+                        <line x1="9" y1="13" x2="9.01" y2="13"></line>
+                        <line x1="15" y1="13" x2="15.01" y2="13"></line>
+                    </svg>
+                    <span class="status-indicator-live" title="AI Assistant Online"></span>
+                </div>
+                <div class="chatbot-header-text">
+                    <h3 id="chatbot-title">AttendAI Assistant</h3>
+                    <div class="chatbot-meta">
+                        <span id="chatbot-role-badge" class="role-pill">User</span>
+                        <span class="provider-pill" id="chatbot-model-pill">AI Engine</span>
+                    </div>
+                </div>
+            </div>
+            <div class="chatbot-header-actions">
+                <button type="button" id="chatbot-btn-new" class="chat-btn-icon" title="Start New Chat" aria-label="Start New Chat">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                </button>
+                <button type="button" id="chatbot-btn-clear" class="chat-btn-icon" title="Clear Chat History" aria-label="Clear Chat">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                </button>
+                <button type="button" id="chatbot-btn-close" class="chat-btn-icon close-btn" title="Close Assistant" aria-label="Close">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Notification Banner -->
+        <div id="chatbot-alert-banner" class="chatbot-alert hidden"></div>
+
+        <!-- Messages Viewport -->
+        <div id="chatbot-messages" class="chatbot-messages">
+            <!-- Dynamic Messages Loaded via JS -->
+        </div>
+
+        <!-- Quick Question Chips -->
+        <div id="chatbot-suggestions-container" class="chatbot-suggestions-area">
+            <span class="suggestions-label">Suggested for you:</span>
+            <div id="chatbot-chips-list" class="suggestions-chips">
+                <!-- Injected via JavaScript based on role -->
+            </div>
+        </div>
+
+        <!-- Typing Indicator -->
+        <div id="chatbot-typing-indicator" class="chatbot-typing hidden">
+            <div class="typing-bubble">
+                <span class="typing-dot"></span>
+                <span class="typing-dot"></span>
+                <span class="typing-dot"></span>
+            </div>
+            <span class="typing-label">AttendAI is thinking...</span>
+        </div>
+
+        <!-- Footer Input Area -->
+        <form id="chatbot-form" class="chatbot-input-area" onsubmit="return false;">
+            <div class="input-wrapper">
+                <textarea 
+                    id="chatbot-input" 
+                    class="chatbot-textarea" 
+                    placeholder="Ask about attendance, courses, students..." 
+                    rows="1"
+                    maxlength="4000"
+                    aria-label="Chatbot input"
+                ></textarea>
+                <button type="button" id="chatbot-btn-send" class="chatbot-send-btn" aria-label="Send message" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
+                </button>
+            </div>
+            <div class="chatbot-footer-caption">
+                <span>AttendAI AI • Press Enter to send, Shift+Enter for newline</span>
+            </div>
+        </form>
+    </div>
+</div>

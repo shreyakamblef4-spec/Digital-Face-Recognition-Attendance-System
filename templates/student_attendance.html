@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AttendAI — Student Attendance</title>
+    <meta name="description" content="View your personal attendance history and real-time facial recognition verification">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        (function() {
+            var theme = localStorage.getItem('appTheme') || 'dark';
+            if (theme === 'light') {
+                document.documentElement.classList.add('light-theme');
+            } else {
+                document.documentElement.classList.add('dark-theme');
+            }
+        })();
+    </script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/chatbot.css') }}">
+    <style>
+        .student-hero-card {
+            background: linear-gradient(135deg, rgba(34, 211, 238, 0.08) 0%, rgba(16, 185, 129, 0.05) 100%), var(--surface-card, #131417);
+            border: 1px solid rgba(34, 211, 238, 0.2);
+            border-radius: 14px;
+            padding: 24px 28px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .student-profile-info {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .student-avatar {
+            width: 54px;
+            height: 54px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent, #22D3EE), #10b981);
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: 700;
+            box-shadow: 0 4px 14px rgba(34, 211, 238, 0.35);
+            flex-shrink: 0;
+        }
+        .student-details h2 {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-primary, #F4F4F5);
+            margin-bottom: 4px;
+        }
+        .student-meta-pills {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .meta-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 3px 10px;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--text-secondary, #9A9CA3);
+            border: 1px solid var(--border-subtle, #26282D);
+        }
+        .meta-pill.highlight {
+            background: rgba(34, 211, 238, 0.12);
+            color: var(--accent, #22D3EE);
+            border-color: rgba(34, 211, 238, 0.3);
+        }
+        .student-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .summary-card {
+            background: var(--surface-card, #131417);
+            border: 1px solid var(--border-subtle, #26282D);
+            border-radius: 12px;
+            padding: 20px 22px;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .summary-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        }
+        .summary-card .card-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .summary-card .card-title {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-muted, #71717A);
+        }
+        .summary-card .card-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+        .summary-card .card-value {
+            font-size: 30px;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            color: var(--text-primary, #F4F4F5);
+            line-height: 1.1;
+        }
+        .summary-card .card-subtext {
+            font-size: 12px;
+            color: var(--text-secondary, #A1A1AA);
+            margin-top: 6px;
+        }
+        .icon-present { background: rgba(16, 185, 129, 0.15); color: #34D399; }
+        .icon-sessions { background: rgba(34, 211, 238, 0.15); color: #22D3EE; }
+        .icon-absent { background: rgba(239, 68, 68, 0.15); color: #F87171; }
+        .icon-pct { background: rgba(168, 85, 247, 0.15); color: #C084FC; }
+
+        .status-badge-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            text-transform: capitalize;
+        }
+        .status-badge-pill.present {
+            background: rgba(16, 185, 129, 0.16);
+            color: #34D399;
+            border: 1px solid rgba(16, 185, 129, 0.35);
+        }
+        .status-badge-pill.absent {
+            background: rgba(239, 68, 68, 0.16);
+            color: #F87171;
+            border: 1px solid rgba(239, 68, 68, 0.35);
+        }
+        .rec-status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            background: rgba(34, 211, 238, 0.1);
+            color: var(--accent, #22D3EE);
+            border: 1px solid rgba(34, 211, 238, 0.25);
+        }
+        .filter-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            margin-bottom: 18px;
+            flex-wrap: wrap;
+        }
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .table-search-input, .table-date-input {
+            height: 38px;
+            background: var(--surface-card, #131417);
+            border: 1px solid var(--border-subtle, #26282D);
+            border-radius: 8px;
+            padding: 0 14px;
+            color: var(--text-primary, #F4F4F5);
+            font-family: inherit;
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.18s;
+        }
+        .table-search-input:focus, .table-date-input:focus {
+            border-color: var(--accent, #22D3EE);
+        }
+        .records-card {
+            background: var(--surface-card, #131417);
+            border: 1px solid var(--border-subtle, #26282D);
+            border-radius: 14px;
+            padding: 24px;
+        }
+        .card-header-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 18px;
+        }
+        .card-header-bar h3 {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-primary, #F4F4F5);
+        }
+        .data-table th {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted, #71717A);
+            padding: 12px 16px;
+        }
+        .data-table td {
+            font-size: 13px;
+            padding: 14px 16px;
+            color: var(--text-primary, #F4F4F5);
+            border-bottom: 1px solid var(--border-subtle, #26282D);
+        }
+        .empty-records {
+            text-align: center;
+            padding: 48px 16px;
+            color: var(--text-muted, #71717A);
+        }
+        .empty-records svg {
+            margin-bottom: 12px;
+            color: var(--text-muted, #71717A);
+            opacity: 0.6;
+        }
+    </style>
+</head>
+<body>
+<div class="app-container">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-logo">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="8" r="4"/>
+                    <path d="M6 20v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/>
+                </svg>
+            </div>
+            <div class="brand-name">
+                <h2>AttendAI</h2>
+                <span>Student Portal</span>
+            </div>
+        </div>
+
+        <nav class="sidebar-menu">
+            <a class="menu-item active" href="/student/attendance">
+                <svg class="menu-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                    <line x1="16" y1="2" x2="16" y2="6"/>
+                    <line x1="8" y1="2" x2="8" y2="6"/>
+                    <line x1="3" y1="10" x2="21" y2="10"/>
+                </svg>
+                My Attendance
+            </a>
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="student-profile-sidebar" style="margin-bottom:12px;">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);" id="sidebar-student-name">
+                    {{ student.name }}
+                </div>
+                <div style="font-size:11px;color:var(--accent);font-weight:600;margin-top:2px;" id="sidebar-student-roll">
+                    Roll #{{ student.roll_no }}
+                </div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:4px;" id="sidebar-student-class">
+                    {{ student.class_name }}
+                </div>
+                <div style="font-size:11px;color:var(--text-muted);" id="sidebar-student-course">
+                    {{ student.course_name }}
+                </div>
+            </div>
+
+            <a href="/student/logout" class="btn btn-secondary btn-sm" id="btn-sidebar-logout" style="width:100%;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                    <polyline points="16 17 21 12 16 7"/>
+                    <line x1="21" y1="12" x2="9" y2="12"/>
+                </svg>
+                <span>Sign Out</span>
+            </a>
+            <div class="version" style="margin-top:10px;">v1.0 &middot; Student View</div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Header -->
+        <header class="main-header">
+            <div class="header-title">
+                <h1>My Attendance Dashboard</h1>
+                <p>Personal attendance record and live face recognition verification timeline</p>
+            </div>
+
+            <div class="header-actions">
+                <button class="btn-theme-toggle" id="btn-theme-toggle" aria-label="Toggle Theme">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
+                    </svg>
+                    <span id="theme-label">Dark</span>
+                </button>
+                <span class="date-display" id="current-date-time"></span>
+                <a href="/student/logout" class="btn btn-secondary btn-sm" id="btn-top-logout" style="text-decoration:none;display:flex;align-items:center;gap:6px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                        <polyline points="16 17 21 12 16 7"/>
+                        <line x1="21" y1="12" x2="9" y2="12"/>
+                    </svg>
+                    <span>Sign Out</span>
+                </a>
+            </div>
+        </header>
+
+        <!-- Student Hero Profile Banner -->
+        <div class="student-hero-card">
+            <div class="student-profile-info">
+                <div class="student-avatar" id="hero-avatar">
+                    {{ student.name[:1]|upper }}
+                </div>
+                <div class="student-details">
+                    <h2 id="hero-student-name">{{ student.name }}</h2>
+                    <div class="student-meta-pills">
+                        <span class="meta-pill highlight" id="hero-roll">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="7" r="4"/>
+                            </svg>
+                            Roll #{{ student.roll_no }}
+                        </span>
+                        <span class="meta-pill" id="hero-course">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                            </svg>
+                            {{ student.course_name }}
+                        </span>
+                        <span class="meta-pill" id="hero-class">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                            </svg>
+                            {{ student.class_name }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="hero-actions">
+                <span style="font-size:12px;color:var(--text-muted);">Status:</span>
+                <span class="status-badge-pill present" style="margin-left:6px;">Enrolled Student</span>
+            </div>
+        </div>
+
+        <!-- Attendance Summary Metric Cards -->
+        <div class="student-summary-grid">
+            <!-- Overall Percentage Card -->
+            <div class="summary-card">
+                <div class="card-top">
+                    <span class="card-title">Attendance Rate</span>
+                    <div class="card-icon icon-pct">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M12 6v6l4 2"/>
+                        </svg>
+                    </div>
+                </div>
+                <div class="card-value" id="summary-percentage">--%</div>
+                <div class="card-subtext" id="summary-pct-status">Calculating percentage...</div>
+            </div>
+
+            <!-- Total Present Card -->
+            <div class="summary-card">
+                <div class="card-top">
+                    <span class="card-title">Total Present</span>
+                    <div class="card-icon icon-present">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                    </div>
+                </div>
+                <div class="card-value" id="summary-present">--</div>
+                <div class="card-subtext">Verified present sessions</div>
+            </div>
+
+            <!-- Total Sessions Card -->
+            <div class="summary-card">
+                <div class="card-top">
+                    <span class="card-title">Total Sessions</span>
+                    <div class="card-icon icon-sessions">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                            <line x1="16" y1="2" x2="16" y2="6"/>
+                            <line x1="8" y1="2" x2="8" y2="6"/>
+                        </svg>
+                    </div>
+                </div>
+                <div class="card-value" id="summary-sessions">--</div>
+                <div class="card-subtext">Recorded class meetings</div>
+            </div>
+
+            <!-- Total Absent Card -->
+            <div class="summary-card">
+                <div class="card-top">
+                    <span class="card-title">Total Absent</span>
+                    <div class="card-icon icon-absent">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </div>
+                </div>
+                <div class="card-value" id="summary-absent">--</div>
+                <div class="card-subtext">Missed sessions</div>
+            </div>
+        </div>
+
+        <!-- Attendance Records Card & Table -->
+        <div class="records-card">
+            <div class="card-header-bar">
+                <h3>Attendance Records</h3>
+                <span style="font-size:12px;color:var(--text-muted);" id="records-count-badge">Loading records...</span>
+            </div>
+
+            <!-- Filter Toolbar -->
+            <div class="filter-toolbar">
+                <div class="filter-group">
+                    <input type="text" id="filter-search" class="table-search-input" placeholder="Search by date or status..." autocomplete="off">
+                    <input type="date" id="filter-date" class="table-date-input" title="Filter by specific date">
+                    <button type="button" class="btn btn-secondary btn-sm" id="btn-clear-filters" style="height:38px;">
+                        Clear Filter
+                    </button>
+                </div>
+                <div class="filter-group">
+                    <button type="button" class="btn btn-secondary btn-sm" id="btn-refresh-records" style="height:38px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M23 4v6h-6M1 20v-6h6"/>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                        </svg>
+                        <span>Refresh</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Table -->
+            <div style="overflow-x:auto;">
+                <table class="data-table" id="student-attendance-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Time</th>
+                            <th>Attendance Status</th>
+                            <th>Face Recognition Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="attendance-tbody">
+                        <tr>
+                            <td colspan="4" class="empty-records">
+                                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <polyline points="12 6 12 12 16 14"/>
+                                </svg>
+                                <div>Loading your attendance records...</div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        let allRecords = [];
+
+        // Elements
+        const tbody = document.getElementById("attendance-tbody");
+        const summaryPresent = document.getElementById("summary-present");
+        const summarySessions = document.getElementById("summary-sessions");
+        const summaryAbsent = document.getElementById("summary-absent");
+        const summaryPercentage = document.getElementById("summary-percentage");
+        const summaryPctStatus = document.getElementById("summary-pct-status");
+        const recordsCountBadge = document.getElementById("records-count-badge");
+        const filterSearch = document.getElementById("filter-search");
+        const filterDate = document.getElementById("filter-date");
+        const btnClearFilters = document.getElementById("btn-clear-filters");
+        const btnRefresh = document.getElementById("btn-refresh-records");
+        const dateTimeDisplay = document.getElementById("current-date-time");
+
+        function escapeHtml(val) {
+            return String(val ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        // Clock
+        function updateClock() {
+            const now = new Date();
+            const opts = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' };
+            const dateStr = now.toLocaleDateString('en-US', opts);
+            const timeStr = now.toLocaleTimeString('en-US', { hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            if (dateTimeDisplay) dateTimeDisplay.textContent = `${dateStr} | ${timeStr}`;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // Theme Toggle
+        const themeBtn = document.getElementById("btn-theme-toggle");
+        const themeLabel = document.getElementById("theme-label");
+        function updateTheme(theme) {
+            if (theme === 'light') {
+                document.documentElement.classList.add('light-theme');
+                document.documentElement.classList.remove('dark-theme');
+                if (themeLabel) themeLabel.textContent = 'Light';
+            } else {
+                document.documentElement.classList.remove('light-theme');
+                document.documentElement.classList.add('dark-theme');
+                if (themeLabel) themeLabel.textContent = 'Dark';
+            }
+        }
+        themeBtn?.addEventListener("click", () => {
+            const isLight = document.documentElement.classList.contains('light-theme');
+            const next = isLight ? 'dark' : 'light';
+            localStorage.setItem('appTheme', next);
+            updateTheme(next);
+        });
+
+        // Fetch Attendance
+        async function fetchAttendance() {
+            try {
+                recordsCountBadge.textContent = "Updating...";
+                const res = await fetch("/api/student/my-attendance");
+                if (res.status === 401 || res.status === 403) {
+                    window.location.href = "/student-login";
+                    return;
+                }
+                const data = await res.json();
+
+                if (data.success) {
+                    allRecords = data.records || [];
+                    const summary = data.summary || {};
+
+                    // Update Summary Cards
+                    summarySessions.textContent = summary.total_sessions ?? allRecords.length;
+                    summaryPresent.textContent = summary.total_present ?? 0;
+                    summaryAbsent.textContent = summary.total_absent ?? 0;
+                    const pct = summary.percentage !== undefined ? summary.percentage : 0;
+                    summaryPercentage.textContent = `${pct}%`;
+
+                    if (pct >= 75) {
+                        summaryPercentage.style.color = "#34D399";
+                        summaryPctStatus.textContent = "Good Standing (>= 75% requirement met)";
+                        summaryPctStatus.style.color = "#34D399";
+                    } else {
+                        summaryPercentage.style.color = "#F87171";
+                        summaryPctStatus.textContent = "Attendance below 75% requirement";
+                        summaryPctStatus.style.color = "#F87171";
+                    }
+
+                    renderTable();
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="4" class="empty-records">Error: ${escapeHtml(data.message || 'Unable to retrieve attendance')}</td></tr>`;
+                }
+            } catch (err) {
+                console.error("Error loading attendance:", err);
+                tbody.innerHTML = `<tr><td colspan="4" class="empty-records">Failed to load attendance records. Please refresh.</td></tr>`;
+            }
+        }
+
+        function renderTable() {
+            const q = (filterSearch?.value || '').toLowerCase().trim();
+            const dateVal = filterDate?.value || '';
+
+            const filtered = allRecords.filter(r => {
+                const matchDate = !dateVal || r.date === dateVal;
+                const matchQuery = !q ||
+                    (r.date && r.date.toLowerCase().includes(q)) ||
+                    (r.status && r.status.toLowerCase().includes(q)) ||
+                    (r.recognition_status && r.recognition_status.toLowerCase().includes(q));
+                return matchDate && matchQuery;
+            });
+
+            recordsCountBadge.textContent = `${filtered.length} of ${allRecords.length} session(s)`;
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="empty-records">
+                            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <circle cx="12" cy="12" r="10"/>
+                                <line x1="8" y1="12" x2="16" y2="12"/>
+                            </svg>
+                            <div>${allRecords.length === 0 ? "No attendance sessions recorded yet for your profile." : "No records match the active filter criteria."}</div>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(r => {
+                const isPresent = (r.status || '').toLowerCase() === 'present';
+                const statusClass = isPresent ? 'present' : 'absent';
+                const recStatus = r.recognition_status || 'Recognized';
+
+                return `
+                    <tr>
+                        <td style="font-weight:600;">
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-muted);">
+                                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                                    <line x1="16" y1="2" x2="16" y2="6"/>
+                                    <line x1="8" y1="2" x2="8" y2="6"/>
+                                </svg>
+                                <span>${escapeHtml(r.date)}</span>
+                            </div>
+                        </td>
+                        <td style="color:var(--text-secondary);font-family:monospace;font-size:13px;">
+                            ${escapeHtml(r.time || '—')}
+                        </td>
+                        <td>
+                            <span class="status-badge-pill ${statusClass}">
+                                <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;"></span>
+                                ${escapeHtml(r.status || 'Present')}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="rec-status-pill">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                                    <circle cx="12" cy="13" r="4"></circle>
+                                </svg>
+                                <span>${escapeHtml(recStatus)}</span>
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Filter events
+        filterSearch?.addEventListener("input", renderTable);
+        filterDate?.addEventListener("change", renderTable);
+        btnClearFilters?.addEventListener("click", () => {
+            if (filterSearch) filterSearch.value = "";
+            if (filterDate) filterDate.value = "";
+            renderTable();
+        });
+        btnRefresh?.addEventListener("click", fetchAttendance);
+
+        // Initial fetch
+        fetchAttendance();
+    });
+</script>
+
+<!-- AttendAI Chatbot Integration -->
+{% include 'components/chatbot.html' %}
+<script src="{{ url_for('static', filename='js/chatbot.js') }}"></script>
+</body>
+</html>
