@@ -139,6 +139,7 @@ http://localhost:5000
 * **Teacher**: `teacher@attendai.edu` / `Teacher@123`
 * **Admin**: `admin@attendai.edu` / `Admin@123`
 * **Faculty**: `faculty@attendai.edu` / `Faculty@123`
+* **Student**: `student@attendai.edu` / `Student@123`
 
 ---
 
@@ -170,7 +171,7 @@ Both the web UI dashboard and `Attendance.csv` use the unified 8-column layout:
 
 | Student Roll Number | Student Name | Class | Course | Date | Time | Attendance Status | Face Recognition Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| 101 | Riddhi Verma | B.Sc 2nd Year | Artificial Intelligence & Machine Learning | 2026-09-20 | 10:15:30 | Present | Recognized (99%) |
+| 101 | shreya kamble | B.Sc 3nd Year | Artificial Intelligence & Machine Learning | 2026-09-20 | 10:15:30 | Present | Recognized (99%) |
 
 ---
 
