@@ -54,9 +54,9 @@ def test_e2e_centralization():
 def _run_e2e_centralization_steps():
     client = app.test_client()
 
-    artifact_dir = r"C:\Users\Dell\.gemini\antigravity-ide\brain\75aaf02c-94b5-42c0-961f-5493d733456e"
-    student_img_path = os.path.join(artifact_dir, "test_student_face_1789955589363.jpg")
-    unknown_img_path = os.path.join(artifact_dir, "unknown_person_face_1789955612856.jpg")
+    test_data_dir = ROOT_DIR / "tests" / "test_data"
+    student_img_path = str(test_data_dir / "test_face.jpg")
+    unknown_img_path = str(test_data_dir / "unknown_face.jpg")
 
     assert os.path.exists(student_img_path), f"Student face image missing at {student_img_path}"
     assert os.path.exists(unknown_img_path), f"Unknown face image missing at {unknown_img_path}"
@@ -129,7 +129,7 @@ def _run_e2e_centralization_steps():
         print(f"  Created Course ID: {course_id}, Name: '{course_name}', Status: {res.json['course']['status']}")
 
         # Verify Course in Central DB
-        c_db = Course.query.get(course_id)
+        c_db = db.session.get(Course, course_id)
         assert c_db is not None and c_db.name == "B.Sc AI & ML"
         assert c_db.status == "active"
 
@@ -155,7 +155,7 @@ def _run_e2e_centralization_steps():
         print(f"  Created Class ID: {class_id} under Course ID: {course_id}")
 
         # Verify Class in Central DB
-        cl_db = Class.query.get(class_id)
+        cl_db = db.session.get(Class, class_id)
         assert cl_db is not None and cl_db.name == "2nd Year"
         assert cl_db.course_id == course_id
         assert cl_db.course_name == "B.Sc AI & ML"
@@ -397,6 +397,13 @@ def _run_e2e_centralization_steps():
         print("  PASSED: Step 11 Student Profile & Attendance Verified")
 
     try:
+        from student_storage import resolve_photo_path, delete_student_folder
+        with app.app_context():
+            st = Student.query.filter_by(roll_no="101").first()
+            if st and st.face_image_path:
+                p = resolve_photo_path(st.face_image_path)
+                if p and p.exists():
+                    delete_student_folder(p.parent)
         from database import ensure_default_accounts, seed_default_academic_data
         with app.app_context():
             ensure_default_accounts()

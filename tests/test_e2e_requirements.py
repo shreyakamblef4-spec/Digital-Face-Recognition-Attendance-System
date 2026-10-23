@@ -24,10 +24,10 @@ def run_tests():
 
     client = app.test_client()
 
-    # Paths to generated realistic test face images
-    artifact_dir = r"C:\Users\Dell\.gemini\antigravity-ide\brain\75aaf02c-94b5-42c0-961f-5493d733456e"
-    student_img_path = os.path.join(artifact_dir, "test_student_face_1789955589363.jpg")
-    unknown_img_path = os.path.join(artifact_dir, "unknown_person_face_1789955612856.jpg")
+    # Paths to local realistic test face images bundled in tests/test_data
+    test_data_dir = ROOT_DIR / "tests" / "test_data"
+    student_img_path = str(test_data_dir / "test_face.jpg")
+    unknown_img_path = str(test_data_dir / "unknown_face.jpg")
 
     assert os.path.exists(student_img_path), f"Student face image missing at {student_img_path}"
     assert os.path.exists(unknown_img_path), f"Unknown face image missing at {unknown_img_path}"
@@ -346,9 +346,50 @@ def run_tests():
         print(f"  CSV contains matching row for Roll 101")
         print("  PASSED")
 
+        # Clean up test student created during test to preserve clean database & files
+        try:
+            from student_storage import resolve_photo_path, delete_student_folder
+            st = Student.query.filter_by(roll_no="101").first()
+            if st:
+                p = resolve_photo_path(st.face_image_path)
+                if p and p.exists():
+                    delete_student_folder(p.parent)
+                FaceEmbedding.query.filter_by(student_id=st.id).delete()
+                AttendanceRecord.query.filter_by(student_id=st.id).delete()
+                db.session.delete(st)
+            AttendanceRecord.query.filter_by(roll_no="101").delete()
+            from models import User
+            test_user = User.query.filter_by(email="101@student.attendai.edu").first()
+            if test_user:
+                db.session.delete(test_user)
+            db.session.commit()
+
+            # Clean from Attendance.csv
+            import csv
+            csv_path = ROOT_DIR / "Attendance.csv"
+            if csv_path.exists():
+                cleaned_rows = []
+                with open(csv_path, "r", encoding="utf-8") as f:
+                    reader = csv.reader(f)
+                    for r in reader:
+                        if not r or not any(r):
+                            continue
+                        roll = r[0].strip() if len(r) > 0 else ""
+                        name = r[1].strip() if len(r) > 1 else ""
+                        if roll == "101" or "test" in name.lower():
+                            continue
+                        cleaned_rows.append(r)
+                with open(csv_path, "w", encoding="utf-8", newline="") as f:
+                    writer = csv.writer(f)
+                    writer.writerows(cleaned_rows)
+        except Exception as e:
+            db.session.rollback()
+            print(f"[WARN] Test teardown notice: {e}")
+
     print("\n" + "=" * 70)
     print("ALL 9 TEST SUITES COMPLETED WITH 100% SUCCESS!")
     print("=" * 70)
 
 if __name__ == "__main__":
     run_tests()
+

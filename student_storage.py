@@ -25,7 +25,15 @@ import cv2
 logger = logging.getLogger("attendai.student_storage")
 
 BASE_DIR = Path(__file__).resolve().parent
-STUDENT_DIRECTORY_ROOT = BASE_DIR / "Student Directory"
+IS_VERCEL = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
+if IS_VERCEL:
+    STUDENT_DIRECTORY_ROOT = Path("/tmp/Student Directory")
+    try:
+        STUDENT_DIRECTORY_ROOT.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+else:
+    STUDENT_DIRECTORY_ROOT = BASE_DIR / "Student Directory"
 
 
 def sanitize_folder_name(name: str) -> str:
@@ -203,27 +211,33 @@ def resolve_photo_path(stored_path: Optional[str]) -> Optional[Path]:
     if p3.exists() and p3.is_file():
         return p3
 
-    # Recursive search under Student Directory by filename or roll number
-    if STUDENT_DIRECTORY_ROOT.exists():
-        filename = Path(stored_path).name
-        for match in STUDENT_DIRECTORY_ROOT.glob(f"**/{filename}"):
-            if match.is_file():
-                return match
+    # Recursive search under Student Directory roots by filename or roll number
+    roots_to_search = [STUDENT_DIRECTORY_ROOT]
+    bundled_dir = BASE_DIR / "Student Directory"
+    if bundled_dir != STUDENT_DIRECTORY_ROOT and bundled_dir.exists():
+        roots_to_search.append(bundled_dir)
 
-        # Also search folder by roll number or student name if stored_path is a roll/name string
-        stem = Path(stored_path).stem
-        parts = stem.split("_")
-        if parts:
-            roll_part = parts[0]
-            if roll_part:
-                for match in STUDENT_DIRECTORY_ROOT.glob(f"**/Roll_{roll_part}_*/face.jpg"):
-                    if match.is_file():
-                        return match
-            if len(parts) > 1:
-                name_part = "_".join(parts[1:])
-                if name_part:
-                    for match in STUDENT_DIRECTORY_ROOT.glob(f"**/Roll_*_{name_part}/face.jpg"):
+    for root_dir in roots_to_search:
+        if root_dir.exists():
+            filename = Path(stored_path).name
+            for match in root_dir.glob(f"**/{filename}"):
+                if match.is_file():
+                    return match
+
+            # Also search folder by roll number or student name if stored_path is a roll/name string
+            stem = Path(stored_path).stem
+            parts = stem.split("_")
+            if parts:
+                roll_part = parts[0]
+                if roll_part:
+                    for match in root_dir.glob(f"**/Roll_{roll_part}_*/face.jpg"):
                         if match.is_file():
                             return match
+                if len(parts) > 1:
+                    name_part = "_".join(parts[1:])
+                    if name_part:
+                        for match in root_dir.glob(f"**/Roll_*_{name_part}/face.jpg"):
+                            if match.is_file():
+                                return match
 
     return None

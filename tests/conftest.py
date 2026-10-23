@@ -28,6 +28,28 @@ def ensure_database_state():
             except Exception:
                 pass
 
+@pytest.fixture(scope="session", autouse=True)
+def ensure_test_face_assets():
+    """Ensure tests/test_data/ contains test_face.jpg and unknown_face.jpg for tests."""
+    test_data_dir = ROOT_DIR / "tests" / "test_data"
+    test_data_dir.mkdir(parents=True, exist_ok=True)
+    test_face = test_data_dir / "test_face.jpg"
+    unknown_face = test_data_dir / "unknown_face.jpg"
+
+    student_dir = ROOT_DIR / "Student Directory"
+    sample_faces = list(student_dir.rglob("face.jpg")) if student_dir.exists() else []
+
+    if not test_face.exists() and sample_faces:
+        import shutil
+        shutil.copy2(str(sample_faces[0]), str(test_face))
+
+    if not unknown_face.exists():
+        import shutil
+        if len(sample_faces) > 1:
+            shutil.copy2(str(sample_faces[1]), str(unknown_face))
+        elif sample_faces:
+            shutil.copy2(str(sample_faces[0]), str(unknown_face))
+
 
 @pytest.fixture(scope="session", autouse=True)
 def preserve_attendance_csv():

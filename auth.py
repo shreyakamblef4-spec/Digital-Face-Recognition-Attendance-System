@@ -5,7 +5,6 @@ Provides decorators for role-based access control and authentication utilities.
 
 from flask import session, redirect, url_for, jsonify, request
 from functools import wraps
-from datetime import datetime
 from models import User, AuditLog
 from database import db
 
@@ -165,8 +164,8 @@ def get_current_user():
         return None
     
     try:
-        user = User.query.get(session.get('user_id'))
-        return user
+        user_id = session.get('user_id')
+        return db.session.get(User, user_id) if user_id else None
     except Exception:
         return None
 
@@ -221,7 +220,7 @@ def check_permission(user_id, action, resource_type, resource_id=None):
         Boolean indicating if user has permission
     """
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id) if user_id else None
         if not user:
             return False
         

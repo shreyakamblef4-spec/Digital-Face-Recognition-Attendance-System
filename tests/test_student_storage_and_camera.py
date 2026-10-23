@@ -12,6 +12,9 @@ import shutil
 import pytest
 import numpy as np
 import cv2
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
 
 from web_app import app, stop_camera, start_camera, train_model
 from database import db
@@ -66,13 +69,21 @@ def _get_or_create_test_course_and_class(course_name, class_name):
 
 
 def _get_sample_face_bytes():
-    # Use real face image if available from artifacts
-    artifact_face = r"C:\Users\Dell\.gemini\antigravity-ide\brain\75aaf02c-94b5-42c0-961f-5493d733456e\test_student_face_1789955589363.jpg"
-    if os.path.exists(artifact_face):
-        with open(artifact_face, "rb") as f:
+    # Use real face image bundled with tests
+    test_face_path = ROOT_DIR / "tests" / "test_data" / "test_face.jpg"
+    if test_face_path.exists():
+        with open(test_face_path, "rb") as f:
             return f.read()
 
-    # Fallback to generating a synthetic image (will fail face detection in registration, but good for error tests)
+    # Fallback to registered student face from Student Directory
+    student_dir = ROOT_DIR / "Student Directory"
+    if student_dir.exists():
+        for p in student_dir.rglob("face.jpg"):
+            if p.is_file():
+                with open(p, "rb") as f:
+                    return f.read()
+
+    # Fallback to generating a synthetic image
     img = np.zeros((300, 300, 3), dtype=np.uint8)
     _, buf = cv2.imencode('.jpg', img)
     return buf.tobytes()
@@ -134,7 +145,7 @@ def test_registration_course_directory_separation(auth_client):
         c2_id, cl2_id = c2.id, cl2.id
 
         # Clean existing test students if any
-        for roll in ['AIML-001', 'CS-001']:
+        for roll in ['STORAGE-AIML-001', 'STORAGE-CS-001']:
             st = Student.query.filter_by(roll_no=roll).first()
             if st:
                 if st.face_image_path:
@@ -147,8 +158,8 @@ def test_registration_course_directory_separation(auth_client):
 
     # 1. Register AIML Student
     res1 = auth_client.post('/api/students', data={
-        'roll_no': 'AIML-001',
-        'name': 'Aarya Patel',
+        'roll_no': 'STORAGE-AIML-001',
+        'name': 'Storage Student One',
         'course_id': str(c1_id),
         'class_id': str(cl1_id),
         'image': (io.BytesIO(face_bytes), 'face.jpg')
@@ -159,8 +170,8 @@ def test_registration_course_directory_separation(auth_client):
 
     # 2. Register CS Student
     res2 = auth_client.post('/api/students', data={
-        'roll_no': 'CS-001',
-        'name': 'Rohan Shah',
+        'roll_no': 'STORAGE-CS-001',
+        'name': 'Storage Student Two',
         'course_id': str(c2_id),
         'class_id': str(cl2_id),
         'image': (io.BytesIO(face_bytes), 'face.jpg')
@@ -171,8 +182,8 @@ def test_registration_course_directory_separation(auth_client):
 
     # 3. Verify physical directory separation
     with app.app_context():
-        st_aiml = Student.query.filter_by(roll_no='AIML-001').first()
-        st_cs = Student.query.filter_by(roll_no='CS-001').first()
+        st_aiml = Student.query.filter_by(roll_no='STORAGE-AIML-001').first()
+        st_cs = Student.query.filter_by(roll_no='STORAGE-CS-001').first()
 
         assert st_aiml is not None
         assert st_cs is not None
@@ -180,7 +191,7 @@ def test_registration_course_directory_separation(auth_client):
         # AIML storage checks
         assert "Artificial_Intelligence_and_Machine_Learning" in st_aiml.face_image_path
         assert "2nd_Year" in st_aiml.face_image_path
-        assert "AIML_001" in st_aiml.face_image_path
+        assert "STORAGE_AIML_001" in st_aiml.face_image_path
         p_aiml = resolve_photo_path(st_aiml.face_image_path)
         assert p_aiml is not None and p_aiml.exists()
         assert p_aiml.name == "face.jpg"
@@ -191,7 +202,7 @@ def test_registration_course_directory_separation(auth_client):
         # CS storage checks
         assert "Computer_Science" in st_cs.face_image_path
         assert "2nd_Year" in st_cs.face_image_path
-        assert "CS_001" in st_cs.face_image_path
+        assert "STORAGE_CS_001" in st_cs.face_image_path
         p_cs = resolve_photo_path(st_cs.face_image_path)
         assert p_cs is not None and p_cs.exists()
         assert p_cs.name == "face.jpg"

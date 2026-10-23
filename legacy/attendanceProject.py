@@ -109,7 +109,7 @@ def load_known_faces(image_dir: Path):
 
     if not face_samples:
         print(f"No recognizable faces were found in {image_dir}; continuing with an empty recognizer")
-        return names, recognizer
+        return names, recognizer, []
 
     return names, recognizer, face_samples
 
@@ -120,25 +120,44 @@ def mark_attendance(name: str, attendance_file: Path) -> bool:
     today = now.strftime("%Y-%m-%d")
     timestamp = now.strftime("%H:%M:%S")
 
+    is_modern_8col = False
     if not attendance_file.exists() or attendance_file.stat().st_size == 0:
         with attendance_file.open("a", encoding="utf-8") as handle:
-            handle.write("Name,Date,Time,Status\n")
+            handle.write("Student Roll Number,Student Name,Class,Course,Date,Time,Attendance Status,Face Recognition Status\n")
+        is_modern_8col = True
 
     with attendance_file.open("r", encoding="utf-8") as handle:
         existing_rows = handle.readlines()
 
+    if existing_rows and "Student Roll Number" in existing_rows[0]:
+        is_modern_8col = True
+
     for row in existing_rows:
         fields = [field.strip() for field in row.strip().split(",")]
-        if len(fields) >= 2 and fields[0].lower() == name.lower() and fields[1] == today:
-            return False
+        if len(fields) >= 8:
+            # AttendAI 8-column format: roll, name, class, course, date, time, status, recognition_status
+            if fields[1].lower() == name.lower() and fields[4] == today:
+                return False
+        elif len(fields) >= 4:
+            # 4-column legacy format: name, date, time, status
+            if fields[0].lower() == name.lower() and fields[1] == today:
+                return False
 
     with attendance_file.open("a", encoding="utf-8") as handle:
-        handle.write(f"{name},{today},{timestamp},Present\n")
+        if is_modern_8col:
+            handle.write(f"—,{name},—,—,{today},{timestamp},Present,Legacy Prototype\n")
+        else:
+            handle.write(f"{name},{today},{timestamp},Present\n")
 
     return True
 
 
 def main() -> int:
+    """
+    Initial CLI prototype for real-time webcam face recognition attendance.
+    Loads known student faces, runs YuNet detection and SFace feature extraction,
+    and logs attendance into Attendance.csv.
+    """
     try:
         class_names, recognizer, face_samples = load_known_faces(IMAGE_DIR)
     except (FileNotFoundError, ValueError, RuntimeError) as exc:
@@ -146,6 +165,7 @@ def main() -> int:
         return 1
 
     print("Encoding complete")
+    known_embeddings = [recognizer.feature(sample) for sample in face_samples] if face_samples else []
 
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
@@ -161,7 +181,6 @@ def main() -> int:
                 print("Failed to read from the webcam.")
                 break
 
-            gray_frame = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             faces = detect_faces(img)
 
             for (x1, y1, x2, y2) in faces:
@@ -171,9 +190,8 @@ def main() -> int:
                 face_roi = cv2.resize(face_roi, (112, 112))
                 face_embedding = recognizer.feature(face_roi)
 
-                if class_names and face_samples:
-                    known_embeddings = [recognizer.feature(sample) for sample in face_samples]
-                    similarities = [np.linalg.norm(embedding - face_embedding) for embedding in known_embeddings]
+                if class_names and known_embeddings:
+                    similarities = [np.linalg.norm(k_emb - face_embedding) for k_emb in known_embeddings]
                     best_index = int(np.argmin(similarities)) if similarities else -1
                     if best_index >= 0 and similarities[best_index] < RECOGNITION_THRESHOLD:
                         name = class_names[best_index]

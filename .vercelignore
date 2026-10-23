@@ -1,0 +1,17 @@
+# Vercel Deployment Ignore Configuration
+.git
+.github
+.pytest_cache
+.vscode
+.venv
+venv
+env
+tests
+*.mp4
+*.log
+*.test_bak
+*.corrupted_bak
+attendance_system_recovered.db
+*.db-journal
+*.db-wal
+*.db-shm

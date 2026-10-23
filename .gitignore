@@ -92,3 +92,4 @@ attendance_system_recovered.db
 *.db-shm
 
 AttendAI_Demo_Recording.mp4
+tests/test_data/

@@ -60,13 +60,31 @@ class DevelopmentConfig(Config):
     """Development environment configuration."""
 
     DEBUG = True
-    SQLALCHEMY_ECHO = True
-    SQLALCHEMY_DATABASE_URI = os.getenv(
-        "DATABASE_URL", f"sqlite:///{BASE_DIR}/attendance_system.db"
-    )
-    SQLALCHEMY_ENGINE_OPTIONS = {
-        "connect_args": {"timeout": 30}
-    }
+    SQLALCHEMY_ECHO = False
+
+    raw_db_url = os.getenv("DATABASE_URL", "").strip()
+    if raw_db_url:
+        if raw_db_url.startswith("postgres://"):
+            raw_db_url = raw_db_url.replace("postgres://", "postgresql://", 1)
+        SQLALCHEMY_DATABASE_URI = raw_db_url
+        SQLALCHEMY_ENGINE_OPTIONS = {
+            "pool_pre_ping": True,
+            "pool_recycle": 300,
+            "pool_timeout": 30,
+        }
+    else:
+        if os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
+            tmp_db = Path("/tmp/attendance_system.db")
+            bundled_db = BASE_DIR / "attendance_system.db"
+            if not tmp_db.exists() and bundled_db.exists():
+                import shutil
+                shutil.copy2(str(bundled_db), str(tmp_db))
+            SQLALCHEMY_DATABASE_URI = f"sqlite:///{tmp_db}"
+        else:
+            SQLALCHEMY_DATABASE_URI = f"sqlite:///{BASE_DIR}/attendance_system.db"
+        SQLALCHEMY_ENGINE_OPTIONS = {
+            "connect_args": {"timeout": 30}
+        }
     SESSION_COOKIE_SECURE = False
 
 
@@ -84,18 +102,32 @@ class ProductionConfig(Config):
     DEBUG = False
     SQLALCHEMY_ECHO = False
 
-    # In production, DATABASE_URL must be set via environment variable
-    SQLALCHEMY_DATABASE_URI = os.getenv(
-        "DATABASE_URL",
-        "postgresql://user:password@localhost/attendance_system",
-    )
+    raw_db_url = os.getenv("DATABASE_URL", "").strip()
+    if raw_db_url:
+        if raw_db_url.startswith("postgres://"):
+            raw_db_url = raw_db_url.replace("postgres://", "postgresql://", 1)
+        SQLALCHEMY_DATABASE_URI = raw_db_url
+    else:
+        if os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
+            tmp_db = Path("/tmp/attendance_system.db")
+            bundled_db = BASE_DIR / "attendance_system.db"
+            if not tmp_db.exists() and bundled_db.exists():
+                import shutil
+                shutil.copy2(str(bundled_db), str(tmp_db))
+            SQLALCHEMY_DATABASE_URI = f"sqlite:///{tmp_db}"
+        else:
+            SQLALCHEMY_DATABASE_URI = os.getenv(
+                "DATABASE_URL",
+                "postgresql://user:password@localhost/attendance_system",
+            )
+
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_pre_ping": True,
         "pool_recycle": 300,
         "pool_timeout": 30,
     }
 
-    # Enforce HTTPS and secure cookies
+    # Enforce HTTPS and secure cookies in production
     SESSION_COOKIE_SECURE = True
     SESSION_COOKIE_HTTPONLY = True
 

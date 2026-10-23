@@ -35,9 +35,24 @@ from student_storage import (
 # Directory Setup
 BASE_DIR = Path(__file__).resolve().parent
 STUDENT_DIR = STUDENT_DIRECTORY_ROOT
-STUDENT_DIR.mkdir(parents=True, exist_ok=True)
+try:
+    STUDENT_DIR.mkdir(parents=True, exist_ok=True)
+except Exception:
+    pass
+
 IMAGE_DIR = BASE_DIR / "ImagesAttendance"
-ATTENDANCE_FILE = BASE_DIR / "Attendance.csv"
+
+IS_VERCEL = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
+if IS_VERCEL:
+    ATTENDANCE_FILE = Path("/tmp/Attendance.csv")
+    if not ATTENDANCE_FILE.exists() and (BASE_DIR / "Attendance.csv").exists():
+        try:
+            import shutil
+            shutil.copy2(str(BASE_DIR / "Attendance.csv"), str(ATTENDANCE_FILE))
+        except Exception:
+            pass
+else:
+    ATTENDANCE_FILE = BASE_DIR / "Attendance.csv"
 DATA_DIR = BASE_DIR / "data"
 
 FACE_DETECTOR_MODEL = DATA_DIR / "face_detection_yunet_2023mar.onnx"
@@ -113,8 +128,17 @@ def get_face_recognizer():
     return recognizer
 
 
-def detect_faces(image, detector):
+def detect_faces(image, detector=None):
     """Detect faces using FaceDetectorYN and return bounding boxes."""
+    if image is None or not hasattr(image, 'shape') or image.size == 0:
+        return []
+
+    if detector is None:
+        try:
+            detector = get_face_detector()
+        except Exception:
+            return []
+
     if detector is None:
         return []
 
@@ -144,7 +168,10 @@ def train_model():
     global class_names, recognizer, face_embeddings, face_metadata, training_error
     import json
 
-    IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
     names = []
     embeddings = []
     metadata = []
@@ -407,7 +434,10 @@ def train_model():
 
 def repair_attendance_file():
     """Ensure the CSV exists and uses the 8-field format."""
-    ATTENDANCE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        ATTENDANCE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
     records = []
     header_fields = [
         "Student Roll Number",
@@ -1272,14 +1302,14 @@ def _find_matching_student(course_input, class_input, roll_input):
 
             c_match = False
             if crs_id:
-                crs_obj = Course.query.get(crs_id)
+                crs_obj = db.session.get(Course, crs_id)
                 c_match = crs_obj and (_normalize_academic_str(crs_obj.name) in _normalize_academic_str(dir_course) or _normalize_academic_str(dir_course) in _normalize_academic_str(crs_obj.name))
             elif norm_course:
                 c_match = norm_course in _normalize_academic_str(dir_course) or _normalize_academic_str(dir_course) in norm_course
 
             cl_match = False
             if cls_id:
-                cls_obj = Class.query.get(cls_id)
+                cls_obj = db.session.get(Class, cls_id)
                 cl_match = cls_obj and (_normalize_academic_str(cls_obj.name) in _normalize_academic_str(dir_class) or _normalize_academic_str(dir_class) in _normalize_academic_str(cls_obj.name))
             elif norm_class:
                 cl_match = norm_class in _normalize_academic_str(dir_class) or _normalize_academic_str(dir_class) in norm_class
@@ -1685,7 +1715,7 @@ def login_page():
     if request.method == 'POST':
         return api_login()
     if 'user_id' in session:
-        user = User.query.get(session.get('user_id'))
+        user = db.session.get(User, session.get('user_id'))
         if not user or not user.is_active:
             session.clear()
         elif request.args.get('tab') or request.args.get('switch'):
@@ -2170,11 +2200,11 @@ def api_camera_session_filter():
     crs_name = "All Courses"
     cls_name = "All Classes"
     if active_recognition_filter.get("course_id"):
-        crs = Course.query.get(active_recognition_filter["course_id"])
+        crs = db.session.get(Course, active_recognition_filter["course_id"])
         if crs:
             crs_name = crs.name
     if active_recognition_filter.get("class_id"):
-        cls = Class.query.get(active_recognition_filter["class_id"])
+        cls = db.session.get(Class, active_recognition_filter["class_id"])
         if cls:
             cls_name = cls.name
 
@@ -2316,11 +2346,11 @@ def add_student():
         return jsonify({"success": False, "message": "Invalid Course or Class identifier."}), 400
 
     # Verify Course and Class exist in centralized database
-    selected_course = Course.query.get(c_id)
+    selected_course = db.session.get(Course, c_id)
     if not selected_course:
         return jsonify({"success": False, "message": "Selected Course does not exist."}), 404
 
-    selected_class = Class.query.get(cl_id)
+    selected_class = db.session.get(Class, cl_id)
     if not selected_class:
         return jsonify({"success": False, "message": "Selected Class does not exist."}), 404
 
@@ -2487,7 +2517,7 @@ def delete_student(target):
     try:
         student = None
         if target.isdigit():
-            student = Student.query.get(int(target))
+            student = db.session.get(Student, int(target))
         else:
             student = Student.query.filter(
                 db.or_(
@@ -2978,7 +3008,7 @@ def create_user():
 def get_user(target_user_id):
     """Get specific user details."""
     try:
-        user = User.query.get(target_user_id)
+        user = db.session.get(User, target_user_id)
         if not user:
             return jsonify({"success": False, "message": "User not found"}), 404
         
@@ -3006,7 +3036,7 @@ def update_user(target_user_id):
     admin_user_id = session.get('user_id')
     
     try:
-        user = User.query.get(target_user_id)
+        user = db.session.get(User, target_user_id)
         if not user:
             return jsonify({"success": False, "message": "User not found"}), 404
         
@@ -3048,7 +3078,7 @@ def admin_reset_password(target_user_id):
     """Admin endpoint to reset a user's password."""
     admin_user_id = session.get('user_id')
     try:
-        user = User.query.get(target_user_id)
+        user = db.session.get(User, target_user_id)
         if not user:
             return jsonify({"success": False, "message": "User not found"}), 404
         data = request.get_json() or {}
@@ -3132,7 +3162,7 @@ def admin_register_student_face(student_id):
     """Register or re-capture facial data for a student."""
     admin_user_id = session.get('user_id')
     try:
-        student = Student.query.get(student_id)
+        student = db.session.get(Student, student_id)
         if not student:
             return jsonify({"success": False, "message": "Student not found"}), 404
         
@@ -3275,7 +3305,7 @@ def admin_get_audit_logs():
         for l in logs:
             user_name = "System"
             if l.user_id:
-                u = User.query.get(l.user_id)
+                u = db.session.get(User, l.user_id)
                 if u:
                     user_name = u.name
             res.append({
@@ -3310,7 +3340,7 @@ def delete_user(target_user_id):
     admin_user_id = session.get('user_id')
     
     try:
-        user = User.query.get(target_user_id)
+        user = db.session.get(User, target_user_id)
         if not user:
             return jsonify({"success": False, "message": "User not found"}), 404
         
@@ -3404,7 +3434,7 @@ def update_department(dept_id):
     user_id = session.get('user_id')
     
     try:
-        dept = Department.query.get(dept_id)
+        dept = db.session.get(Department, dept_id)
         if not dept:
             return jsonify({"success": False, "message": "Department not found"}), 404
         
@@ -3445,7 +3475,7 @@ def delete_department(dept_id):
     user_id = session.get('user_id')
     
     try:
-        dept = Department.query.get(dept_id)
+        dept = db.session.get(Department, dept_id)
         if not dept:
             return jsonify({"success": False, "message": "Department not found"}), 404
         
@@ -3553,7 +3583,7 @@ def admin_update_course(course_id):
     """Update course name, code, description, and status."""
     user_id = session.get('user_id')
     try:
-        course = Course.query.get(course_id)
+        course = db.session.get(Course, course_id)
         if not course:
             return jsonify({"success": False, "message": "Course not found."}), 404
 
@@ -3603,7 +3633,7 @@ def admin_toggle_course_status(course_id):
     """Toggle or set course active/inactive status."""
     user_id = session.get('user_id')
     try:
-        course = Course.query.get(course_id)
+        course = db.session.get(Course, course_id)
         if not course:
             return jsonify({"success": False, "message": "Course not found."}), 404
 
@@ -3634,7 +3664,7 @@ def admin_delete_course(course_id):
     """Delete a course only if it has no classes or registered students."""
     user_id = session.get('user_id')
     try:
-        course = Course.query.get(course_id)
+        course = db.session.get(Course, course_id)
         if not course:
             return jsonify({"success": False, "message": "Course not found."}), 404
 
@@ -3717,7 +3747,7 @@ def create_class():
         if not course_id:
             course = Course.query.first()
             if not course:
-                dept_obj = Department.query.get(department_id) if department_id else None
+                dept_obj = db.session.get(Department, department_id) if department_id else None
                 c_name = dept_obj.name if dept_obj else "General Course"
                 c_code = dept_obj.code if dept_obj else "GEN"
                 course = Course(name=c_name, code=c_code, description="Auto-created course")
@@ -3725,7 +3755,7 @@ def create_class():
                 db.session.flush()
             course_id = course.id
         else:
-            course = Course.query.get(course_id)
+            course = db.session.get(Course, course_id)
             if not course:
                 return jsonify({"success": False, "message": "Selected Course does not exist."}), 404
 
@@ -3776,7 +3806,7 @@ def update_class(class_id):
     """Update class details."""
     user_id = session.get('user_id')
     try:
-        cls = Class.query.get(class_id)
+        cls = db.session.get(Class, class_id)
         if not cls:
             return jsonify({"success": False, "message": "Class not found."}), 404
 
@@ -3794,7 +3824,7 @@ def update_class(class_id):
             cls.capacity = int(data['capacity'])
         if 'course_id' in data:
             c_id = data['course_id']
-            if not Course.query.get(c_id):
+            if not db.session.get(Course, c_id):
                 return jsonify({"success": False, "message": "Specified Course does not exist."}), 404
             cls.course_id = c_id
         if 'department_id' in data and data['department_id']:
@@ -3822,7 +3852,7 @@ def admin_toggle_class_status(class_id):
     """Toggle class active/inactive status."""
     user_id = session.get('user_id')
     try:
-        cls = Class.query.get(class_id)
+        cls = db.session.get(Class, class_id)
         if not cls:
             return jsonify({"success": False, "message": "Class not found."}), 404
 
@@ -3849,7 +3879,7 @@ def delete_class(class_id):
     """Delete a class."""
     user_id = session.get('user_id')
     try:
-        cls = Class.query.get(class_id)
+        cls = db.session.get(Class, class_id)
         if not cls:
             return jsonify({"success": False, "message": "Class not found."}), 404
 
@@ -3929,7 +3959,7 @@ def teacher_dashboard():
     user_id = session.get('user_id')
     
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user:
             return jsonify({"success": False, "message": "User not found"}), 404
         
@@ -4041,7 +4071,7 @@ def teacher_get_classes():
     user_id = session.get('user_id')
     
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user:
             return jsonify({"success": False, "message": "User not found"}), 404
         
@@ -4079,14 +4109,14 @@ def teacher_class_attendance_stats(class_id):
     user_id = session.get('user_id')
     
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user:
             return jsonify({"success": False, "message": "User not found"}), 404
         
         teacher = _ensure_teacher_profile(user)
         if not teacher:
             return jsonify({"success": False, "message": "Teacher profile not found"}), 404
-        cls = Class.query.get(class_id)
+        cls = db.session.get(Class, class_id)
         
         if not cls:
             return jsonify({"success": False, "message": "Class not found"}), 404
@@ -4163,7 +4193,7 @@ def teacher_low_attendance():
     threshold = request.args.get('threshold', 75, type=float)
     
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user:
             return jsonify({"success": False, "message": "User not found"}), 404
         
@@ -4226,7 +4256,7 @@ def teacher_get_sessions():
     user_id = session.get('user_id')
     
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user:
             return jsonify({"success": False, "message": "User not found"}), 404
         
@@ -4268,7 +4298,7 @@ def teacher_create_session():
     data = request.get_json()
     
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user:
             return jsonify({"success": False, "message": "User not found"}), 404
         
@@ -4287,12 +4317,12 @@ def teacher_create_session():
         end_time_str = data.get('end_time')
         notes = data.get('notes', '')
         
-        cls = Class.query.get(class_id)
+        cls = db.session.get(Class, class_id)
         if not cls:
             return jsonify({"success": False, "message": "Class not found"}), 404
         
         if subject_id:
-            subject = Subject.query.get(subject_id)
+            subject = db.session.get(Subject, subject_id)
             if not subject:
                 return jsonify({"success": False, "message": "Subject not found"}), 404
         
@@ -4354,12 +4384,12 @@ def teacher_get_session(session_id):
     user_id = session.get('user_id')
     
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user or not user.teacher:
             return jsonify({"success": False, "message": "Teacher profile not found"}), 404
         
         teacher = user.teacher
-        session_obj = AttendanceSession.query.get(session_id)
+        session_obj = db.session.get(AttendanceSession, session_id)
         
         if not session_obj:
             return jsonify({"success": False, "message": "Session not found"}), 404
@@ -4413,12 +4443,12 @@ def teacher_update_session(session_id):
     data = request.get_json()
     
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user or not user.teacher:
             return jsonify({"success": False, "message": "Teacher profile not found"}), 404
         
         teacher = user.teacher
-        session_obj = AttendanceSession.query.get(session_id)
+        session_obj = db.session.get(AttendanceSession, session_id)
         
         if not session_obj:
             return jsonify({"success": False, "message": "Session not found"}), 404
@@ -4462,12 +4492,12 @@ def teacher_delete_session(session_id):
     user_id = session.get('user_id')
     
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user or not user.teacher:
             return jsonify({"success": False, "message": "Teacher profile not found"}), 404
         
         teacher = user.teacher
-        session_obj = AttendanceSession.query.get(session_id)
+        session_obj = db.session.get(AttendanceSession, session_id)
         
         if not session_obj:
             return jsonify({"success": False, "message": "Session not found"}), 404
@@ -4503,12 +4533,12 @@ def teacher_start_session(session_id):
     user_id = session.get('user_id')
     
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user or not user.teacher:
             return jsonify({"success": False, "message": "Teacher profile not found"}), 404
         
         teacher = user.teacher
-        session_obj = AttendanceSession.query.get(session_id)
+        session_obj = db.session.get(AttendanceSession, session_id)
         
         if not session_obj:
             return jsonify({"success": False, "message": "Session not found"}), 404
@@ -4548,12 +4578,12 @@ def teacher_complete_session(session_id):
     data = request.get_json() or {}
     
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user or not user.teacher:
             return jsonify({"success": False, "message": "Teacher profile not found"}), 404
         
         teacher = user.teacher
-        session_obj = AttendanceSession.query.get(session_id)
+        session_obj = db.session.get(AttendanceSession, session_id)
         
         if not session_obj:
             return jsonify({"success": False, "message": "Session not found"}), 404
@@ -4617,7 +4647,7 @@ def mark_attendance_manual():
     data = request.get_json()
     
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user or not user.teacher:
             return jsonify({"success": False, "message": "Teacher profile not found"}), 404
         
@@ -4636,7 +4666,7 @@ def mark_attendance_manual():
             return jsonify({"success": False, "message": "Invalid status"}), 400
         
         # Verify session belongs to this teacher
-        session_obj = AttendanceSession.query.get(session_id)
+        session_obj = db.session.get(AttendanceSession, session_id)
         if not session_obj:
             return jsonify({"success": False, "message": "Session not found"}), 404
         
@@ -4644,7 +4674,7 @@ def mark_attendance_manual():
             return jsonify({"success": False, "message": "Access denied"}), 403
         
         # Verify student is in the class
-        student = Student.query.get(student_id)
+        student = db.session.get(Student, student_id)
         if not student:
             return jsonify({"success": False, "message": "Student not found"}), 404
         
@@ -4711,14 +4741,14 @@ def correct_attendance(record_id):
     data = request.get_json()
     
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user or not user.teacher:
             return jsonify({"success": False, "message": "Teacher profile not found"}), 404
         
         teacher = user.teacher
         
         # Get the attendance record
-        attendance = AttendanceRecord.query.get(record_id)
+        attendance = db.session.get(AttendanceRecord, record_id)
         if not attendance:
             return jsonify({"success": False, "message": "Attendance record not found"}), 404
         
@@ -4769,14 +4799,14 @@ def delete_attendance(record_id):
     user_id = session.get('user_id')
     
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user or not user.teacher:
             return jsonify({"success": False, "message": "Teacher profile not found"}), 404
         
         teacher = user.teacher
         
         # Get the attendance record
-        attendance = AttendanceRecord.query.get(record_id)
+        attendance = db.session.get(AttendanceRecord, record_id)
         if not attendance:
             return jsonify({"success": False, "message": "Attendance record not found"}), 404
         
@@ -4814,7 +4844,7 @@ def faculty_dashboard():
     user_id = session.get('user_id')
     
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user:
             return jsonify({"success": False, "message": "User not found"}), 404
 
@@ -4912,7 +4942,7 @@ def faculty_attendance_trends():
     days = request.args.get('days', 30, type=int)
     
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user:
             return jsonify({"success": False, "message": "User not found"}), 404
 
@@ -4991,7 +5021,7 @@ def teacher_attendance_report():
     format_type = request.args.get('format', 'csv')  # csv, json
     
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user or not user.teacher:
             return jsonify({"success": False, "message": "Teacher profile not found"}), 404
         
@@ -5070,7 +5100,7 @@ def teacher_class_summary_report():
     class_id = request.args.get('class_id', type=int)
     
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user or not user.teacher:
             return jsonify({"success": False, "message": "Teacher profile not found"}), 404
         
@@ -5079,7 +5109,7 @@ def teacher_class_summary_report():
         if not class_id:
             return jsonify({"success": False, "message": "class_id is required"}), 400
         
-        cls = Class.query.get(class_id)
+        cls = db.session.get(Class, class_id)
         if not cls:
             return jsonify({"success": False, "message": "Class not found"}), 404
         
@@ -5135,7 +5165,7 @@ def faculty_department_report():
     user_id = session.get('user_id')
     
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user or not user.teacher:
             return jsonify({"success": False, "message": "Faculty profile not found"}), 404
         
@@ -5207,7 +5237,7 @@ def student_dashboard():
     user_id = session.get('user_id')
     
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user or not user.student:
             return jsonify({"success": False, "message": "Student profile not found"}), 404
         
@@ -5246,8 +5276,8 @@ def student_dashboard():
         recent_records = sorted(all_records, key=lambda x: x.timestamp, reverse=True)[:10]
         recent_data = []
         for record in recent_records:
-            session_obj = AttendanceSession.query.get(record.session_id)
-            subject = Subject.query.get(session_obj.subject_id) if session_obj else None
+            session_obj = db.session.get(AttendanceSession, record.session_id)
+            subject = db.session.get(Subject, session_obj.subject_id) if (session_obj and session_obj.subject_id) else None
             recent_data.append({
                 "date": session_obj.date.isoformat() if session_obj else "N/A",
                 "subject": subject.name if subject else "Unknown",
@@ -5281,7 +5311,7 @@ def student_attendance_summary():
     user_id = session.get('user_id')
     
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user or not user.student:
             return jsonify({"success": False, "message": "Student profile not found"}), 404
         
@@ -5338,7 +5368,7 @@ def student_notifications():
     """Get in-app notifications for logged-in student."""
     user_id = session.get('user_id')
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user or not user.student:
             return jsonify({"success": True, "notifications": []})
         
@@ -5361,8 +5391,8 @@ def student_notifications():
         
         recent_records = sorted(records, key=lambda x: x.timestamp, reverse=True)[:5]
         for idx, rec in enumerate(recent_records, start=2):
-            session_obj = AttendanceSession.query.get(rec.session_id)
-            subject = Subject.query.get(session_obj.subject_id) if session_obj and session_obj.subject_id else None
+            session_obj = db.session.get(AttendanceSession, rec.session_id)
+            subject = db.session.get(Subject, session_obj.subject_id) if session_obj and session_obj.subject_id else None
             notifications.append({
                 "id": idx,
                 "title": f"Attendance Marked ({rec.status.capitalize()})",
@@ -5386,7 +5416,7 @@ def student_attendance_history():
     sort_by = request.args.get('sort', 'date_desc')  # date_desc, date_asc, status
     
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user or not user.student:
             return jsonify({"success": False, "message": "Student profile not found"}), 404
         
@@ -5410,9 +5440,9 @@ def student_attendance_history():
         
         history_data = []
         for record in records:
-            session_obj = AttendanceSession.query.get(record.session_id)
-            subject = Subject.query.get(session_obj.subject_id) if session_obj else None
-            cls = Class.query.get(session_obj.class_id) if session_obj else None
+            session_obj = db.session.get(AttendanceSession, record.session_id)
+            subject = db.session.get(Subject, session_obj.subject_id) if (session_obj and session_obj.subject_id) else None
+            cls = db.session.get(Class, session_obj.class_id) if (session_obj and session_obj.class_id) else None
             
             history_data.append({
                 "record_id": record.id,
@@ -5446,7 +5476,7 @@ def student_attendance_by_subject():
     user_id = session.get('user_id')
     
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user or not user.student:
             return jsonify({"success": False, "message": "Student profile not found"}), 404
         
@@ -5469,11 +5499,11 @@ def student_attendance_by_subject():
         # Group by subject
         subject_data = {}
         for record in all_records:
-            session_obj = AttendanceSession.query.get(record.session_id)
-            if not session_obj:
+            session_obj = db.session.get(AttendanceSession, record.session_id)
+            if not session_obj or not session_obj.subject_id:
                 continue
             
-            subject = Subject.query.get(session_obj.subject_id)
+            subject = db.session.get(Subject, session_obj.subject_id)
             if not subject:
                 continue
             
@@ -5532,7 +5562,7 @@ def student_low_attendance_warning():
     threshold = request.args.get('threshold', 75, type=int)
     
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user or not user.student:
             return jsonify({"success": False, "message": "Student profile not found"}), 404
         
@@ -5600,7 +5630,7 @@ def student_attendance_report():
     end_date = request.args.get('end_date')
     
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user or not user.student:
             return jsonify({"success": False, "message": "Student profile not found"}), 404
         
@@ -5629,9 +5659,9 @@ def student_attendance_report():
         # Prepare report data
         report_rows = []
         for record in records:
-            session_obj = AttendanceSession.query.get(record.session_id)
-            subject = Subject.query.get(session_obj.subject_id) if session_obj else None
-            cls = Class.query.get(session_obj.class_id) if session_obj else None
+            session_obj = db.session.get(AttendanceSession, record.session_id)
+            subject = db.session.get(Subject, session_obj.subject_id) if (session_obj and session_obj.subject_id) else None
+            cls = db.session.get(Class, session_obj.class_id) if (session_obj and session_obj.class_id) else None
             
             report_rows.append({
                 'Date': session_obj.date.isoformat() if session_obj else 'N/A',
@@ -5675,7 +5705,7 @@ def student_semester_summary():
     user_id = session.get('user_id')
     
     try:
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user or not user.student:
             return jsonify({"success": False, "message": "Student profile not found"}), 404
         
@@ -5696,11 +5726,11 @@ def student_semester_summary():
         # Group by subject
         subject_summary = {}
         for record in records:
-            session_obj = AttendanceSession.query.get(record.session_id)
-            if not session_obj:
+            session_obj = db.session.get(AttendanceSession, record.session_id)
+            if not session_obj or not session_obj.subject_id:
                 continue
             
-            subject = Subject.query.get(session_obj.subject_id)
+            subject = db.session.get(Subject, session_obj.subject_id)
             if not subject:
                 continue
             
